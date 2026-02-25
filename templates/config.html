@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Configuración{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2><i class="bi bi-gear me-2"></i>Configuración</h2>
+</div>
+
+<div class="row g-4">
+
+  <!-- ===== BUSINESS INFO ===== -->
+  <div class="col-lg-6">
+    <div class="card-box">
+      <div class="card-box-header">
+        <h5><i class="bi bi-shop me-2"></i>Datos del Negocio</h5>
+      </div>
+      <div class="p-4">
+        <form action="{{ url_for('config_update') }}" method="POST" enctype="multipart/form-data">
+
+          <!-- Logo preview -->
+          <div class="text-center mb-4">
+            {% if config.logo %}
+              <img src="{{ url_for('static', filename=config.logo) }}"
+                   id="logo-preview"
+                   class="rounded-3 mb-2"
+                   style="max-width:120px;max-height:120px;object-fit:contain;border:2px dashed #dee2e6;">
+            {% else %}
+              <div id="logo-preview"
+                   class="d-inline-flex align-items-center justify-content-center rounded-3 mb-2"
+                   style="width:120px;height:120px;border:2px dashed #dee2e6;background:#f8f9fa;color:#adb5bd;flex-direction:column;gap:4px;">
+                <i class="bi bi-image fs-2"></i>
+                <span style="font-size:.72rem;">Sin logo</span>
+              </div>
+            {% endif %}
+            <div>
+              <label for="logo-input" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-upload me-1"></i>Cambiar logo
+              </label>
+              <input type="file" id="logo-input" name="logo" accept="image/*"
+                     class="d-none" onchange="previewLogo(this)">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Nombre del negocio</label>
+            <input type="text" name="business_name" class="form-control"
+                   value="{{ config.business_name }}" required placeholder="Mi Negocio">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Dirección</label>
+            <input type="text" name="address" class="form-control"
+                   value="{{ config.address }}" placeholder="Calle, Colonia, Ciudad">
+          </div>
+          <div class="mb-4">
+            <label class="form-label fw-semibold small">Teléfono</label>
+            <input type="text" name="phone" class="form-control"
+                   value="{{ config.phone }}" placeholder="(000) 000-0000">
+          </div>
+          <button type="submit" class="btn btn-dark fw-semibold w-100">
+            <i class="bi bi-floppy me-1"></i>Guardar Cambios
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== USER MANAGEMENT ===== -->
+  <div class="col-lg-6">
+    <div class="card-box mb-4">
+      <div class="card-box-header">
+        <h5><i class="bi bi-people me-2"></i>Usuarios</h5>
+        <button class="btn btn-sm btn-success fw-semibold"
+                data-bs-toggle="modal" data-bs-target="#addUserModal">
+          <i class="bi bi-person-plus me-1"></i>Nuevo Usuario
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th class="text-center">Estado</th>
+              <th class="text-center">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+            <tr>
+              <td class="fw-semibold">
+                <i class="bi bi-person-circle me-1 text-muted"></i>{{ u['username'] }}
+                {% if u['id'] == session.get('user_id') %}
+                  <span class="badge bg-primary ms-1" style="font-size:.65rem;">Tú</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if u['role'] == 'admin' %}
+                  <span class="badge bg-danger-subtle text-danger">Admin</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary">Cajero</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if u['active'] %}
+                  <span class="badge bg-success-subtle text-success">Activo</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-muted">Inactivo</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if u['id'] != session.get('user_id') %}
+                <form action="{{ url_for('user_toggle', uid=u['id']) }}" method="POST" class="d-inline">
+                  <button class="btn btn-sm {% if u['active'] %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                          onclick="return confirm('¿{{ 'Desactivar' if u['active'] else 'Activar' }} a {{ u['username'] }}?')">
+                    {% if u['active'] %}
+                      <i class="bi bi-person-slash"></i>
+                    {% else %}
+                      <i class="bi bi-person-check"></i>
+                    {% endif %}
+                  </button>
+                </form>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Info card -->
+    <div class="card-box">
+      <div class="card-box-header">
+        <h5><i class="bi bi-info-circle me-2"></i>Información del Sistema</h5>
+      </div>
+      <div class="p-4">
+        <dl class="row mb-0 small">
+          <dt class="col-6 text-muted">Versión</dt>
+          <dd class="col-6">1.0.0</dd>
+          <dt class="col-6 text-muted">Base de datos</dt>
+          <dd class="col-6">SQLite</dd>
+          <dt class="col-6 text-muted">Usuario actual</dt>
+          <dd class="col-6">{{ session.get('username') }}</dd>
+          <dt class="col-6 text-muted">Rol</dt>
+          <dd class="col-6">{{ session.get('role', '').capitalize() }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== ADD USER MODAL ===== -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">
+          <i class="bi bi-person-plus me-2"></i>Nuevo Usuario
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ url_for('user_add') }}" method="POST">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Nombre de usuario *</label>
+            <input type="text" name="username" class="form-control"
+                   required placeholder="ej. cajero1" autocomplete="off">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Contraseña *</label>
+            <input type="password" name="password" class="form-control"
+                   required placeholder="Contraseña segura" autocomplete="new-password">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Rol</label>
+            <select name="role" class="form-select">
+              <option value="cashier">Cajero</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success fw-semibold">
+            <i class="bi bi-check-lg me-1"></i>Crear Usuario
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function previewLogo(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('logo-preview');
+    if (preview.tagName === 'IMG') {
+      preview.src = e.target.result;
+    } else {
+      const img = document.createElement('img');
+      img.id = 'logo-preview';
+      img.src = e.target.result;
+      img.className = 'rounded-3 mb-2';
+      img.style.cssText = 'max-width:120px;max-height:120px;object-fit:contain;border:2px dashed #dee2e6;';
+      preview.replaceWith(img);
+    }
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+pos.db
+*.db
+.env
+static/uploads/*.png
+static/uploads/*.jpg
+static/uploads/*.jpeg
+static/uploads/*.gif
+static/uploads/*.webp
