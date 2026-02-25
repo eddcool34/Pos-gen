@@ -1,443 +1,851 @@
 {% extends "base.html" %}
 {% block title %}Vender{% endblock %}
 
+{% block head %}
+<style>
+/* ── Full-screen POS overrides ─────────────────────────────────────────── */
+html, body { overflow: hidden; height: 100vh; }
+#content   { padding: 0 !important; height: 100vh; overflow: hidden; flex-direction: column; }
+.flash-wrapper {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 3000; min-width: 320px; max-width: 500px;
+}
+
+/* ── POS top bar ───────────────────────────────────────────────────────── */
+.pos-topbar {
+  height: 52px; flex-shrink: 0;
+  background: #1e2a3a;
+  display: flex; align-items: center; gap: 14px; padding: 0 20px;
+}
+.pos-topbar .ptb-brand {
+  color: #fff; font-weight: 700; font-size: .95rem;
+  display: flex; align-items: center; gap: 8px;
+}
+.pos-topbar .ptb-brand img { height: 28px; border-radius: 5px; }
+.pos-topbar .ptb-pill {
+  background: #27ae60; color: #fff;
+  border-radius: 20px; padding: 3px 12px;
+  font-size: .72rem; font-weight: 700; letter-spacing: .3px;
+}
+.pos-topbar .ptb-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.pos-topbar .ptb-cashier { color: #9baab8; font-size: .82rem; }
+.pos-topbar .ptb-clock   { color: #9baab8; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.pos-topbar .ptb-close   {
+  color: #e74c3c; border: 1px solid rgba(231,76,60,.4); border-radius: 6px;
+  padding: 4px 12px; font-size: .78rem; text-decoration: none; transition: all .15s;
+}
+.pos-topbar .ptb-close:hover { background: #e74c3c; color: #fff; border-color: #e74c3c; }
+
+/* ── Body layout ───────────────────────────────────────────────────────── */
+.pos-body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Products panel ────────────────────────────────────────────────────── */
+.pnl-products { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; }
+.pnl-toolbar  {
+  padding: 10px 16px; background: #fff; border-bottom: 1px solid #e9ecef;
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.search-wrap { display: flex; align-items: center; flex: 1; max-width: 340px; position: relative; }
+.search-wrap input {
+  padding-left: 36px; border-radius: 10px; border: 1.5px solid #e9ecef;
+  font-size: .875rem; height: 38px; width: 100%; outline: none; transition: border-color .15s;
+}
+.search-wrap input:focus { border-color: #3498db; box-shadow: 0 0 0 3px rgba(52,152,219,.1); }
+.search-wrap .s-ico   { position: absolute; left: 11px; color: #adb5bd; pointer-events: none; }
+.search-wrap .s-clear {
+  position: absolute; right: 8px; background: none; border: none;
+  color: #adb5bd; cursor: pointer; padding: 2px 4px; font-size: .85rem; display: none;
+}
+.search-wrap.has-val .s-clear { display: block; }
+.pcount { color: #adb5bd; font-size: .78rem; white-space: nowrap; }
+
+.pnl-cats {
+  padding: 8px 16px; background: #fff; border-bottom: 1px solid #e9ecef;
+  display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none;
+}
+.pnl-cats::-webkit-scrollbar { display: none; }
+
+.pnl-grid {
+  flex: 1; overflow-y: auto; padding: 14px 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px; align-content: start;
+}
+.pnl-grid::-webkit-scrollbar       { width: 4px; }
+.pnl-grid::-webkit-scrollbar-thumb { background: #dee2e6; border-radius: 4px; }
+
+/* ── Product card ──────────────────────────────────────────────────────── */
+.pcard {
+  background: #fff; border: 2px solid #e9ecef; border-radius: 14px;
+  padding: 14px 12px; text-align: center; cursor: pointer;
+  transition: transform .14s, box-shadow .14s, border-color .14s;
+  user-select: none; position: relative; overflow: hidden;
+}
+.pcard::after {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(39,174,96,.14); opacity: 0; border-radius: 14px;
+  transition: opacity .25s;
+}
+.pcard.flash::after   { opacity: 1; }
+.pcard:hover          { border-color: #3498db; transform: translateY(-3px); box-shadow: 0 6px 18px rgba(52,152,219,.18); }
+.pcard:active         { transform: translateY(0); box-shadow: none; }
+.pcard.no-stock       { opacity: .45; cursor: not-allowed; filter: grayscale(.5); }
+.pcard-qty-badge {
+  position: absolute; top: -1px; right: -1px;
+  background: #3498db; color: #fff; border-radius: 0 14px 0 10px;
+  padding: 2px 9px; font-size: .72rem; font-weight: 800;
+  opacity: 0; transform: scale(.7); transition: all .2s;
+}
+.pcard-qty-badge.vis { opacity: 1; transform: scale(1); }
+.pcard-icon {
+  width: 46px; height: 46px; border-radius: 10px; background: #f0f2f5;
+  margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+}
+.pcard-name {
+  font-size: .83rem; font-weight: 700; color: #1e2a3a; line-height: 1.3;
+  margin-bottom: 6px; min-height: 2.2em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pcard-price { font-size: 1.15rem; font-weight: 800; color: #27ae60; margin-bottom: 3px; }
+.pcard-stock      { font-size: .7rem; color: #adb5bd; }
+.pcard-stock.low  { color: #f39c12; }
+.pcard-stock.none { color: #e74c3c; }
+.pnl-empty { grid-column: 1/-1; padding: 60px 20px; text-align: center; color: #adb5bd; }
+.pnl-empty i { font-size: 3.5rem; display: block; margin-bottom: 12px; }
+
+/* ── Cart panel ────────────────────────────────────────────────────────── */
+.pnl-cart {
+  width: 360px; flex-shrink: 0; background: #fff;
+  border-left: 1px solid #e9ecef; display: flex; flex-direction: column;
+}
+.cart-hdr {
+  padding: 14px 16px; border-bottom: 1px solid #f0f2f5;
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.cart-hdr h5 { margin: 0; font-weight: 700; font-size: .95rem; color: #1e2a3a; }
+.cart-hdr .cnt {
+  background: #3498db; color: #fff; border-radius: 20px;
+  padding: 2px 9px; font-size: .72rem; font-weight: 700; min-width: 26px; text-align: center;
+}
+.cart-hdr .btn-clr {
+  margin-left: auto; background: none; border: 1px solid #dee2e6;
+  border-radius: 8px; padding: 4px 10px; font-size: .78rem; cursor: pointer;
+  color: #6c757d; transition: all .15s;
+}
+.cart-hdr .btn-clr:hover { background: #fde8e8; border-color: #e74c3c; color: #e74c3c; }
+
+.cart-body { flex: 1; overflow-y: auto; }
+.cart-body::-webkit-scrollbar       { width: 3px; }
+.cart-body::-webkit-scrollbar-thumb { background: #dee2e6; }
+
+.cart-empty-st {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px; color: #adb5bd;
+}
+.cart-empty-st i            { font-size: 3rem; }
+.cart-empty-st span:last-child { font-size: .75rem; }
+
+/* Cart item row */
+.ci { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid #f8f9fa; transition: background .1s; }
+.ci:hover       { background: #f8f9fa; }
+.ci .ci-info    { flex: 1; min-width: 0; }
+.ci .ci-name    { font-size: .84rem; font-weight: 600; color: #1e2a3a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ci .ci-unit    { font-size: .7rem; color: #adb5bd; }
+.ci .ci-qty     { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.ci-btn {
+  width: 27px; height: 27px; border-radius: 8px; border: 1.5px solid #dee2e6;
+  background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: .9rem; font-weight: 700; transition: all .1s; padding: 0;
+}
+.ci-btn:hover   { background: #f0f2f5; }
+.ci-btn.m:hover { background: #fde8e8; border-color: #e74c3c; color: #e74c3c; }
+.ci-btn.p:hover { background: #e8f8ef; border-color: #27ae60; color: #27ae60; }
+.ci-n   { min-width: 24px; text-align: center; font-weight: 700; font-size: .88rem; }
+.ci-sub { font-size: .88rem; font-weight: 700; min-width: 62px; text-align: right; color: #1e2a3a; flex-shrink: 0; }
+.ci-del { background: none; border: none; cursor: pointer; color: #dee2e6; padding: 2px 4px; font-size: .85rem; transition: color .15s; }
+.ci-del:hover { color: #e74c3c; }
+
+/* Cart footer */
+.cart-foot  { border-top: 1px solid #e9ecef; padding: 14px 16px; flex-shrink: 0; }
+.cs-row     { display: flex; justify-content: space-between; font-size: .82rem; color: #8898aa; margin-bottom: 3px; }
+.cs-total   { display: flex; justify-content: space-between; align-items: baseline; border-top: 2px dashed #e9ecef; margin-top: 8px; padding-top: 10px; margin-bottom: 12px; }
+.cs-label   { font-size: .82rem; font-weight: 600; color: #8898aa; text-transform: uppercase; }
+.cs-val     { font-size: 1.9rem; font-weight: 800; color: #1e2a3a; line-height: 1; }
+.btn-cobrar {
+  width: 100%; padding: 15px; border: none; border-radius: 12px;
+  background: #27ae60; color: #fff; font-size: 1.05rem; font-weight: 700;
+  cursor: pointer; transition: background .18s;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.btn-cobrar:hover    { background: #219a52; }
+.btn-cobrar:disabled { background: #adb5bd; cursor: not-allowed; }
+.bc-badge { margin-left: auto; font-size: .8rem; background: rgba(0,0,0,.15); border-radius: 20px; padding: 2px 8px; }
+.bc-hint  { font-size: .7rem; opacity: .6; font-weight: 400; }
+
+/* ── Payment modal ─────────────────────────────────────────────────────── */
+.pay-total-box { background: #1e2a3a; border-radius: 14px; padding: 16px 20px; text-align: center; color: #fff; margin-bottom: 16px; }
+.pay-total-box .ptb-lbl { font-size: .72rem; color: #9baab8; text-transform: uppercase; letter-spacing: .5px; }
+.pay-total-box .ptb-val { font-size: 2.4rem; font-weight: 800; line-height: 1.1; }
+
+.method-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.mtab {
+  flex: 1; padding: 12px 8px; border: 2px solid #e9ecef; border-radius: 12px;
+  background: #fff; cursor: pointer; text-align: center;
+  font-weight: 600; font-size: .88rem; color: #6c757d; transition: all .15s;
+}
+.mtab i { display: block; font-size: 1.5rem; margin-bottom: 4px; }
+.mtab:hover        { border-color: #3498db; color: #3498db; }
+.mtab.active.cash  { border-color: #27ae60; background: #edfbf2; color: #27ae60; }
+.mtab.active.card  { border-color: #3498db; background: #eef6fd; color: #3498db; }
+
+/* Numpad display */
+.npad-disp {
+  display: flex; align-items: baseline; gap: 4px;
+  background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px;
+  padding: 12px 16px; margin-bottom: 10px; justify-content: flex-end;
+  transition: border-color .2s;
+}
+.npad-disp.err { border-color: #e74c3c; animation: shake .3s; }
+.npad-disp .pfx { font-size: 1.1rem; color: #adb5bd; }
+.npad-disp .val { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; color: #1e2a3a; min-width: 80px; text-align: right; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 60%{transform:translateX(6px)} }
+
+.npad-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 10px; }
+.nk {
+  border: 1.5px solid #e9ecef; border-radius: 10px; background: #fff;
+  font-size: 1.15rem; font-weight: 700; cursor: pointer; padding: 13px 8px; text-align: center;
+  transition: all .1s; color: #1e2a3a; -webkit-tap-highlight-color: transparent;
+}
+.nk:hover  { background: #f0f6ff; border-color: #3498db; }
+.nk:active { background: #e9ecef; transform: scale(.96); }
+.nk.n0     { grid-column: span 2; }
+.nk.nbs    { background: #fef2f2; color: #e74c3c; border-color: #fecaca; }
+.nk.nbs:hover { background: #fee2e2; border-color: #e74c3c; }
+.nk.nc     { background: #fff8e1; color: #e67e22; border-color: #fde68a; }
+.nk.nc:hover { background: #fef3c7; border-color: #e67e22; }
+
+.quick-cash { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.qc {
+  padding: 5px 11px; border: 1.5px solid #dee2e6; border-radius: 20px;
+  background: #fff; cursor: pointer; font-size: .8rem; font-weight: 600; transition: all .14s;
+}
+.qc:hover { background: #3498db; color: #fff; border-color: #3498db; }
+
+.change-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 10px; background: #f0f2f5; transition: background .2s; }
+.change-row .cr-lbl { font-size: .82rem; color: #8898aa; }
+.change-row .cr-val { font-size: 1.4rem; font-weight: 800; color: #27ae60; }
+.change-row.short   { background: #fde8e8; }
+.change-row.short .cr-val { color: #e74c3c; }
+.change-row.exact   { background: #e8f8ef; }
+
+.card-ph { text-align: center; padding: 30px 20px; color: #adb5bd; }
+.card-ph i { font-size: 3.5rem; display: block; margin-bottom: 12px; color: #3498db; }
+
+/* ── Receipt ───────────────────────────────────────────────────────────── */
+.rcpt-wrap { font-family: 'Courier New',monospace; font-size: .82rem; line-height: 1.65; border: 1px dashed #dee2e6; border-radius: 10px; padding: 16px; background: #fafafa; }
+.rcpt-wrap .rh { text-align: center; margin-bottom: 8px; }
+.rcpt-wrap .rh strong { font-size: 1rem; }
+.rcpt-wrap hr { border: none; border-top: 1px dashed #ccc; margin: 8px 0; }
+.rcpt-wrap table { width: 100%; border-collapse: collapse; }
+.rcpt-wrap th { font-size: .72rem; color: #aaa; padding-bottom: 4px; }
+.rcpt-wrap .rn { width: 55%; }
+.rcpt-wrap .rq { width: 15%; text-align: center; }
+.rcpt-wrap .rs { width: 30%; text-align: right; }
+.rt-row   { display: flex; justify-content: space-between; }
+.rt-total { font-weight: 800; font-size: 1rem; }
+.rt-muted { color: #888; font-size: .78rem; }
+.rt-chg   { color: #27ae60; font-weight: 700; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="page-header">
-  <h2><i class="bi bi-cart3 me-2"></i>Punto de Venta</h2>
-  <span class="text-muted small">Cajero: <strong>{{ session.get('username') }}</strong></span>
+<!-- ═══ TOP BAR ════════════════════════════════════════════ -->
+<div class="pos-topbar">
+  <div class="ptb-brand">
+    {% if config.logo %}
+      <img src="{{ url_for('static', filename=config.logo) }}" alt="">
+    {% else %}
+      <i class="bi bi-shop text-white"></i>
+    {% endif %}
+    {{ config.business_name }}
+  </div>
+  <span class="ptb-pill">● EN VENTA</span>
+  <div class="ptb-right">
+    <span class="ptb-cashier"><i class="bi bi-person-circle me-1"></i>{{ session.get('username') }}</span>
+    <span class="ptb-clock" id="clock">--:--</span>
+    <a href="{{ url_for('shift_close') }}" class="ptb-close">
+      <i class="bi bi-stop-circle me-1"></i>Cerrar turno
+    </a>
+  </div>
 </div>
 
-<div class="pos-layout">
+<div class="pos-body">
 
-  <!-- ===== PRODUCTS PANEL ===== -->
-  <div class="pos-products">
-    <div class="products-toolbar">
-      <!-- Search -->
-      <input type="text" id="search-input" class="form-control form-control-sm"
-             placeholder="Buscar producto..." style="max-width:220px;"
-             oninput="filterProducts()">
+  <!-- ═══ PRODUCTS PANEL ══════════════════════════════════ -->
+  <div class="pnl-products">
 
-      <!-- Category pills -->
-      <button class="cat-pill active" data-cat="all" onclick="filterByCategory(this)">Todos</button>
-      {% for c in categories %}
-      <button class="cat-pill" data-cat="{{ c['category'] }}" onclick="filterByCategory(this)">
-        {{ c['category'] }}
+    <div class="pnl-toolbar">
+      <div class="search-wrap" id="sw">
+        <i class="bi bi-search s-ico"></i>
+        <input type="text" id="srch" placeholder="Buscar producto o código de barras…"
+               autocomplete="off" oninput="onSearch(this)">
+        <button class="s-clear" onclick="clearSearch()"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <span class="pcount" id="pcount"></span>
+      <span class="text-muted ms-2" style="font-size:.72rem;"><kbd>F2</kbd> cobrar</span>
+    </div>
+
+    <div class="pnl-cats">
+      <button class="cat-pill active" data-cat="all" onclick="setCat(this)">
+        <i class="bi bi-grid me-1"></i>Todos
       </button>
+      {% for c in categories %}
+      <button class="cat-pill" data-cat="{{ c['category'] }}" onclick="setCat(this)">{{ c['category'] }}</button>
       {% endfor %}
     </div>
 
-    <div class="products-grid" id="products-grid">
+    <div class="pnl-grid">
       {% for p in products %}
-      <div class="product-tile"
-           data-id="{{ p['id'] }}"
-           data-name="{{ p['name'] }}"
-           data-price="{{ p['price'] }}"
-           data-stock="{{ p['stock'] }}"
-           data-cat="{{ p['category'] }}"
-           onclick="addToCart(this)">
-        <div class="pt-name">{{ p['name'] }}</div>
-        <div class="pt-price">${{ "%.2f"|format(p['price']) }}</div>
-        <div class="pt-stock">
-          {% if p['stock'] <= 3 %}
-            <span class="text-danger">{{ p['stock'] }} disponibles</span>
-          {% else %}
-            {{ p['stock'] }} disponibles
-          {% endif %}
+      <div class="pcard {% if p['stock'] == 0 %}no-stock{% endif %}"
+           data-id="{{ p['id'] }}" data-name="{{ p['name'] }}"
+           data-price="{{ p['price'] }}" data-stock="{{ p['stock'] }}"
+           data-cat="{{ p['category'] }}" onclick="addToCart(this)">
+        <span class="pcard-qty-badge" id="qb-{{ p['id'] }}">0</span>
+        <div class="pcard-icon"><i class="bi bi-bag" style="color:#bbc2cb;"></i></div>
+        <div class="pcard-name">{{ p['name'] }}</div>
+        <div class="pcard-price">${{ "%.2f"|format(p['price']) }}</div>
+        <div class="pcard-stock {% if p['stock'] == 0 %}none{% elif p['stock'] <= 5 %}low{% endif %}">
+          {% if p['stock'] == 0 %}Agotado
+          {% elif p['stock'] <= 5 %}{{ p['stock'] }} restantes
+          {% else %}{{ p['stock'] }} en stock{% endif %}
         </div>
       </div>
       {% else %}
-      <div class="text-muted text-center py-5 col-span-all" style="grid-column:1/-1;">
-        <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
-        No hay productos con stock disponible.<br>
-        <a href="{{ url_for('inventory') }}">Ir a Inventario</a>
+      <div class="pnl-empty">
+        <i class="bi bi-box-seam"></i>
+        Sin productos en stock.<br>
+        <a href="{{ url_for('inventory') }}" style="color:#3498db;">Ir a Inventario →</a>
       </div>
       {% endfor %}
     </div>
   </div>
+  <!-- end products -->
 
-  <!-- ===== CART PANEL ===== -->
-  <div class="pos-cart">
-    <div class="cart-header">
-      <span><i class="bi bi-cart3 me-2"></i>Carrito</span>
-      <button class="btn btn-sm btn-outline-secondary" onclick="clearCart()" id="btn-clear">
-        <i class="bi bi-trash3"></i>
-      </button>
+  <!-- ═══ CART PANEL ═══════════════════════════════════════ -->
+  <div class="pnl-cart">
+
+    <div class="cart-hdr">
+      <h5><i class="bi bi-receipt me-2"></i>Orden</h5>
+      <span class="cnt" id="cart-cnt">0</span>
+      <button class="btn-clr" onclick="clearCart()"><i class="bi bi-trash3 me-1"></i>Limpiar</button>
     </div>
 
-    <div id="cart-empty" class="cart-empty">
-      <i class="bi bi-cart-x"></i>
-      <span>Toca un producto para agregar</span>
-    </div>
-
-    <div class="cart-items-list" id="cart-list" style="display:none;"></div>
-
-    <div class="cart-footer">
-      <div class="cart-total-row">
-        <span class="cart-total-label">TOTAL</span>
-        <span class="cart-total-value" id="cart-total">$0.00</span>
+    <div class="cart-body">
+      <div class="cart-empty-st" id="cart-empty">
+        <i class="bi bi-cart-x"></i>
+        <span style="font-size:.875rem;">Toca un producto</span>
+        <span>para comenzar la venta</span>
       </div>
-      <button class="btn-checkout" id="btn-checkout" disabled onclick="openPayment()">
-        <i class="bi bi-cash-stack me-2"></i>Cobrar
+      <div id="cart-list"></div>
+    </div>
+
+    <div class="cart-foot">
+      <div class="cs-row">
+        <span id="items-lbl">0 artículos</span>
+        <span id="sub-lbl">$0.00</span>
+      </div>
+      <div class="cs-total">
+        <span class="cs-label">Total</span>
+        <span class="cs-val" id="cart-total">$0.00</span>
+      </div>
+      <button class="btn-cobrar" id="btn-cobrar" disabled onclick="openPayment()">
+        <i class="bi bi-cash-stack"></i>
+        <span>Cobrar</span>
+        <span class="bc-badge" id="cobrar-badge"></span>
+        <span class="bc-hint">F2</span>
       </button>
     </div>
+
   </div>
+  <!-- end cart -->
 
-</div>
+</div><!-- .pos-body -->
 
-<!-- ===== PAYMENT MODAL ===== -->
-<div class="modal fade" id="paymentModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content rounded-4">
-      <div class="modal-header border-0 pb-0">
-        <h5 class="modal-title fw-bold">Cobro</h5>
+
+<!-- ═══ PAYMENT MODAL ════════════════════════════════════════════════════ -->
+<div class="modal fade" id="payModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:430px;">
+    <div class="modal-content rounded-4 border-0 shadow-lg">
+
+      <div class="modal-header border-0 px-4 pt-4 pb-0">
+        <h5 class="modal-title fw-bold fs-5">
+          <i class="bi bi-cash-stack me-2 text-success"></i>Cobrar Venta
+        </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body pt-2">
-        <div class="text-center mb-3">
-          <span class="text-muted small">Total a cobrar</span>
-          <div class="fs-1 fw-bold text-success" id="modal-total">$0.00</div>
+
+      <div class="modal-body px-4 pt-3 pb-2">
+
+        <div class="pay-total-box">
+          <div class="ptb-lbl">Total a cobrar</div>
+          <div class="ptb-val" id="pay-total-val">$0.00</div>
         </div>
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold small">Método de pago</label>
-          <div class="d-flex gap-2">
-            <button class="btn btn-outline-dark flex-fill pay-method-btn active" data-method="cash"
-                    onclick="selectMethod(this)">
-              <i class="bi bi-cash me-1"></i>Efectivo
-            </button>
-            <button class="btn btn-outline-dark flex-fill pay-method-btn" data-method="card"
-                    onclick="selectMethod(this)">
-              <i class="bi bi-credit-card me-1"></i>Tarjeta
-            </button>
+        <div class="method-tabs">
+          <button class="mtab cash active" data-m="cash" onclick="setMethod(this)">
+            <i class="bi bi-cash-stack"></i>Efectivo
+          </button>
+          <button class="mtab card" data-m="card" onclick="setMethod(this)">
+            <i class="bi bi-credit-card"></i>Tarjeta
+          </button>
+        </div>
+
+        <!-- Cash -->
+        <div id="sec-cash">
+          <div class="npad-disp" id="npad-wrap">
+            <span class="pfx">$</span>
+            <span class="val" id="npad-val">0</span>
+          </div>
+          <div class="npad-grid">
+            <button class="nk" onclick="nk('7')">7</button>
+            <button class="nk" onclick="nk('8')">8</button>
+            <button class="nk" onclick="nk('9')">9</button>
+            <button class="nk" onclick="nk('4')">4</button>
+            <button class="nk" onclick="nk('5')">5</button>
+            <button class="nk" onclick="nk('6')">6</button>
+            <button class="nk" onclick="nk('1')">1</button>
+            <button class="nk" onclick="nk('2')">2</button>
+            <button class="nk" onclick="nk('3')">3</button>
+            <button class="nk nc"  onclick="nk('C')">C</button>
+            <button class="nk n0"  onclick="nk('0')">0</button>
+            <button class="nk nbs" onclick="nk('⌫')"><i class="bi bi-backspace"></i></button>
+          </div>
+          <div class="quick-cash" id="quick-cash"></div>
+          <div class="change-row" id="change-row">
+            <span class="cr-lbl">Cambio</span>
+            <span class="cr-val" id="change-val">$0.00</span>
           </div>
         </div>
 
-        <div id="cash-section">
-          <div class="mb-2">
-            <label class="form-label fw-semibold small">Monto recibido</label>
-            <div class="input-group input-group-lg">
-              <span class="input-group-text fw-bold">$</span>
-              <input type="number" id="amount-paid" class="form-control"
-                     placeholder="0.00" step="0.01" min="0"
-                     oninput="calcChange()">
-            </div>
-          </div>
-          <!-- Quick amounts -->
-          <div class="d-flex gap-1 flex-wrap mb-3" id="quick-amounts"></div>
-          <div class="p-3 rounded" id="change-box" style="background:#f0f2f5;">
-            <div class="d-flex justify-content-between">
-              <span class="small text-muted">Cambio</span>
-              <strong id="change-amount" class="text-success fs-5">$0.00</strong>
-            </div>
+        <!-- Card -->
+        <div id="sec-card" style="display:none;">
+          <div class="card-ph">
+            <i class="bi bi-credit-card-2-front-fill"></i>
+            <p class="mb-1 fw-semibold" style="color:#3498db;">Pago con Tarjeta</p>
+            <p class="small mb-0">Procesa el pago en la terminal y confirma aquí.</p>
           </div>
         </div>
+
       </div>
-      <div class="modal-footer border-0">
-        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button class="btn btn-success btn-lg px-4 fw-bold" id="btn-confirm-sale" onclick="confirmSale()">
-          <i class="bi bi-check-lg me-1"></i>Confirmar Venta
+
+      <div class="modal-footer border-0 px-4 pb-4 gap-2">
+        <button class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-success btn-lg flex-fill fw-bold py-3"
+                id="btn-confirm" onclick="confirmSale()">
+          <i class="bi bi-check-circle me-2"></i>Confirmar Venta
         </button>
       </div>
+
     </div>
   </div>
 </div>
 
-<!-- ===== RECEIPT MODAL ===== -->
-<div class="modal fade" id="receiptModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content rounded-4">
-      <div class="modal-header border-0 pb-0">
-        <h5 class="modal-title fw-bold text-success">
-          <i class="bi bi-check-circle-fill me-2"></i>¡Venta Completada!
-        </h5>
+
+<!-- ═══ RECEIPT MODAL ════════════════════════════════════════════════════ -->
+<div class="modal fade" id="rcptModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px;">
+    <div class="modal-content rounded-4 border-0 shadow-lg">
+
+      <div class="modal-body pt-4 px-4">
+        <div class="text-center mb-3">
+          <div style="width:60px;height:60px;border-radius:50%;background:#e8f8ef;
+                      display:flex;align-items:center;justify-content:center;
+                      margin:0 auto 10px;font-size:1.8rem;color:#27ae60;">
+            <i class="bi bi-check-lg"></i>
+          </div>
+          <h5 class="fw-bold text-success mb-0">¡Venta registrada!</h5>
+          <p class="text-muted small mb-0">Venta <strong id="rcpt-num">#-</strong></p>
+        </div>
+        <div id="rcpt-body"></div>
       </div>
-      <div class="modal-body" id="receipt-body"></div>
-      <div class="modal-footer border-0">
-        <button class="btn btn-outline-secondary" onclick="printReceipt()">
+
+      <div class="modal-footer border-0 px-4 pb-4 gap-2">
+        <button class="btn btn-outline-secondary" onclick="printTicket()">
           <i class="bi bi-printer me-1"></i>Imprimir
         </button>
-        <button class="btn btn-success" onclick="closeReceipt()">
-          Nueva Venta
+        <button class="btn btn-success flex-fill fw-semibold py-2" onclick="closeRcpt()">
+          <i class="bi bi-plus-lg me-1"></i>Nueva venta
         </button>
       </div>
+
     </div>
   </div>
 </div>
 
 {% endblock %}
 
+
 {% block scripts %}
 <script>
-// --------------- Cart State ---------------
-let cart = [];
-let currentTotal = 0;
-let selectedMethod = 'cash';
+/* ═══════════════════════════════════════════════════════════════════
+   POS — JavaScript
+═══════════════════════════════════════════════════════════════════ */
 
-// --------------- Product Filter ---------------
-let activeCat = 'all';
+// Business config injected from server
+const BIZ = {
+  name:    {{ config.business_name | tojson }},
+  address: {{ config.address | tojson }},
+  phone:   {{ config.phone   | tojson }},
+};
 
-function filterProducts() {
-  const q = document.getElementById('search-input').value.toLowerCase();
-  document.querySelectorAll('.product-tile').forEach(tile => {
-    const name = tile.dataset.name.toLowerCase();
-    const cat = tile.dataset.cat;
-    const matchQ = name.includes(q);
-    const matchC = activeCat === 'all' || cat === activeCat;
-    tile.style.display = matchQ && matchC ? '' : 'none';
-  });
+// ── State ─────────────────────────────────────────────────────────────────
+let cart      = [];       // [{id, name, price, qty, stock}]
+let orderTotal = 0;       // cart grand total
+let method    = 'cash';   // 'cash' | 'card'
+let npadStr   = '0';      // numpad input string
+let activeCat = 'all';    // active category filter
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+(function tick() {
+  const el = document.getElementById('clock');
+  if (el) el.textContent = new Date().toLocaleTimeString('es-MX',
+    { hour: '2-digit', minute: '2-digit', hour12: true });
+  setTimeout(tick, 15000);
+})();
+
+// ── Filters ────────────────────────────────────────────────────────────────
+function onSearch(inp) {
+  document.getElementById('sw').classList.toggle('has-val', inp.value.length > 0);
+  applyFilters();
 }
-
-function filterByCategory(btn) {
+function clearSearch() {
+  const inp = document.getElementById('srch');
+  inp.value = '';
+  document.getElementById('sw').classList.remove('has-val');
+  applyFilters();
+  inp.focus();
+}
+function setCat(btn) {
   document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   activeCat = btn.dataset.cat;
-  filterProducts();
+  applyFilters();
+}
+function applyFilters() {
+  const q = document.getElementById('srch').value.toLowerCase().trim();
+  let n = 0;
+  document.querySelectorAll('.pcard').forEach(c => {
+    const ok = (!q || c.dataset.name.toLowerCase().includes(q))
+            && (activeCat === 'all' || c.dataset.cat === activeCat);
+    c.style.display = ok ? '' : 'none';
+    if (ok) n++;
+  });
+  const el = document.getElementById('pcount');
+  if (el) el.textContent = n ? `${n} producto${n > 1 ? 's' : ''}` : '';
 }
 
-// --------------- Cart Operations ---------------
-function addToCart(tile) {
-  const id = parseInt(tile.dataset.id);
-  const name = tile.dataset.name;
-  const price = parseFloat(tile.dataset.price);
-  const stock = parseInt(tile.dataset.stock);
-
-  const existing = cart.find(i => i.id === id);
-  if (existing) {
-    if (existing.qty >= stock) {
-      showToast(`Stock máximo alcanzado (${stock})`, 'warning');
-      return;
-    }
-    existing.qty++;
+// ── Cart operations ────────────────────────────────────────────────────────
+function addToCart(card) {
+  if (card.classList.contains('no-stock')) { toast('Sin stock disponible', 'warning'); return; }
+  const id    = +card.dataset.id;
+  const stock = +card.dataset.stock;
+  const item  = cart.find(i => i.id === id);
+  if (item) {
+    if (item.qty >= stock) { toast(`Máximo disponible: ${stock}`, 'warning'); return; }
+    item.qty++;
   } else {
-    cart.push({ id, name, price, qty: 1, stock });
+    cart.push({ id, name: card.dataset.name, price: +card.dataset.price, qty: 1, stock });
   }
-
-  // Flash tile
-  tile.style.borderColor = '#27ae60';
-  setTimeout(() => tile.style.borderColor = '', 300);
-
+  card.classList.add('flash');
+  setTimeout(() => card.classList.remove('flash'), 300);
+  const qty = cart.find(i => i.id === id).qty;
+  const b   = document.getElementById(`qb-${id}`);
+  if (b) { b.textContent = qty; b.classList.add('vis'); }
   renderCart();
 }
-
 function changeQty(id, delta) {
   const item = cart.find(i => i.id === id);
   if (!item) return;
   item.qty += delta;
   if (item.qty <= 0) {
     cart = cart.filter(i => i.id !== id);
-  } else if (item.qty > item.stock) {
-    item.qty = item.stock;
-    showToast('Stock máximo alcanzado', 'warning');
+    const b = document.getElementById(`qb-${id}`);
+    if (b) b.classList.remove('vis');
+  } else {
+    if (item.qty > item.stock) { item.qty = item.stock; toast('Stock máximo alcanzado', 'warning'); }
+    const b = document.getElementById(`qb-${id}`);
+    if (b) b.textContent = item.qty;
   }
   renderCart();
 }
-
 function removeItem(id) {
   cart = cart.filter(i => i.id !== id);
+  const b = document.getElementById(`qb-${id}`);
+  if (b) b.classList.remove('vis');
   renderCart();
 }
-
 function clearCart() {
+  cart.forEach(i => { const b = document.getElementById(`qb-${i.id}`); if (b) b.classList.remove('vis'); });
   cart = [];
   renderCart();
 }
 
 function renderCart() {
-  const list = document.getElementById('cart-list');
-  const empty = document.getElementById('cart-empty');
-  const btnCheckout = document.getElementById('btn-checkout');
+  const emptyEl  = document.getElementById('cart-empty');
+  const listEl   = document.getElementById('cart-list');
+  const units    = cart.reduce((s, i) => s + i.qty, 0);
+  orderTotal     = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
-  if (cart.length === 0) {
-    list.style.display = 'none';
-    empty.style.display = '';
-    btnCheckout.disabled = true;
-    document.getElementById('cart-total').textContent = '$0.00';
-    currentTotal = 0;
-    return;
-  }
+  document.getElementById('cart-cnt').textContent   = units;
+  document.getElementById('cart-total').textContent = fmt(orderTotal);
+  document.getElementById('sub-lbl').textContent    = fmt(orderTotal);
+  document.getElementById('items-lbl').textContent  = `${units} artículo${units !== 1 ? 's' : ''}`;
+  document.getElementById('cobrar-badge').textContent = orderTotal > 0 ? fmt(orderTotal) : '';
+  document.getElementById('btn-cobrar').disabled    = cart.length === 0;
 
-  list.style.display = '';
-  empty.style.display = 'none';
-  btnCheckout.disabled = false;
+  if (!cart.length) { emptyEl.style.display = ''; listEl.innerHTML = ''; return; }
+  emptyEl.style.display = 'none';
 
-  currentTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  document.getElementById('cart-total').textContent = '$' + currentTotal.toFixed(2);
-
-  list.innerHTML = cart.map(item => `
-    <div class="cart-item">
-      <div>
-        <div class="ci-name">${item.name}</div>
-        <div class="ci-unit">$${item.price.toFixed(2)} c/u</div>
+  listEl.innerHTML = cart.map(item => `
+    <div class="ci">
+      <div class="ci-info">
+        <div class="ci-name">${esc(item.name)}</div>
+        <div class="ci-unit">${fmt(item.price)} c/u</div>
       </div>
-      <div class="qty-ctrl">
-        <button class="qty-btn" onclick="changeQty(${item.id}, -1)">−</button>
-        <span class="qty-num">${item.qty}</span>
-        <button class="qty-btn" onclick="changeQty(${item.id}, 1)">+</button>
+      <div class="ci-qty">
+        <button class="ci-btn m" onclick="changeQty(${item.id},-1)">−</button>
+        <span class="ci-n">${item.qty}</span>
+        <button class="ci-btn p" onclick="changeQty(${item.id},1)">+</button>
       </div>
-      <span class="ci-subtotal">$${(item.price * item.qty).toFixed(2)}</span>
-      <button class="ci-remove" onclick="removeItem(${item.id})">
+      <span class="ci-sub">${fmt(item.price * item.qty)}</span>
+      <button class="ci-del" onclick="removeItem(${item.id})" title="Quitar">
         <i class="bi bi-x-lg"></i>
       </button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-// --------------- Payment ---------------
+// ── Payment ────────────────────────────────────────────────────────────────
 function openPayment() {
-  if (cart.length === 0) return;
-  selectedMethod = 'cash';
-  document.getElementById('modal-total').textContent = '$' + currentTotal.toFixed(2);
-  document.getElementById('amount-paid').value = '';
-  document.getElementById('change-amount').textContent = '$0.00';
-  document.getElementById('cash-section').style.display = '';
+  if (!cart.length) return;
+  method  = 'cash';
+  npadStr = '0';
+  document.getElementById('pay-total-val').textContent = fmt(orderTotal);
+  document.getElementById('npad-val').textContent      = '0';
+  document.getElementById('sec-cash').style.display    = '';
+  document.getElementById('sec-card').style.display    = 'none';
+  document.querySelectorAll('.mtab').forEach(b => b.classList.remove('active'));
+  document.querySelector('.mtab.cash').classList.add('active');
   buildQuickAmounts();
-  const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
-  modal.show();
+  refreshChange();
+  new bootstrap.Modal(document.getElementById('payModal')).show();
 }
 
-function selectMethod(btn) {
-  document.querySelectorAll('.pay-method-btn').forEach(b => {
-    b.classList.remove('active', 'btn-dark');
-    b.classList.add('btn-outline-dark');
-  });
-  btn.classList.remove('btn-outline-dark');
-  btn.classList.add('active', 'btn-dark');
-  selectedMethod = btn.dataset.method;
-  document.getElementById('cash-section').style.display =
-    selectedMethod === 'cash' ? '' : 'none';
+function setMethod(btn) {
+  document.querySelectorAll('.mtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  method  = btn.dataset.m;
+  npadStr = '0';
+  document.getElementById('npad-val').textContent   = '0';
+  document.getElementById('sec-cash').style.display = method === 'cash' ? '' : 'none';
+  document.getElementById('sec-card').style.display = method === 'card' ? '' : 'none';
+  refreshChange();
+}
+
+function nk(key) {
+  if (key === 'C')  { npadStr = '0'; }
+  else if (key === '⌫') { npadStr = npadStr.length > 1 ? npadStr.slice(0, -1) : '0'; }
+  else if (key === '.') { if (!npadStr.includes('.')) npadStr += '.'; }
+  else {
+    npadStr = npadStr === '0' ? key : npadStr + key;
+    const [i, d] = npadStr.split('.');
+    if (i.length > 8)           npadStr = i.slice(0,8) + (d !== undefined ? '.' + d : '');
+    if (d && d.length > 2)      npadStr = i + '.' + d.slice(0,2);
+  }
+  document.getElementById('npad-val').textContent = npadStr;
+  refreshChange();
 }
 
 function buildQuickAmounts() {
-  const total = currentTotal;
-  const amounts = [
-    Math.ceil(total / 10) * 10,
-    Math.ceil(total / 50) * 50,
-    Math.ceil(total / 100) * 100,
-    Math.ceil(total / 500) * 500,
-  ].filter((v, i, a) => v >= total && a.indexOf(v) === i).slice(0, 4);
-
-  const container = document.getElementById('quick-amounts');
-  container.innerHTML = amounts.map(a =>
-    `<button class="btn btn-sm btn-outline-secondary" onclick="setAmount(${a})">$${a}</button>`
-  ).join('');
+  const uniq = [...new Set([5,10,20,50,100,200,500]
+    .map(d => Math.ceil(orderTotal / d) * d))]
+    .filter(v => v >= orderTotal).slice(0, 5);
+  document.getElementById('quick-cash').innerHTML =
+    uniq.map(a => `<button class="qc" onclick="setQ(${a})">${fmt(a)}</button>`).join('');
 }
 
-function setAmount(v) {
-  document.getElementById('amount-paid').value = v;
-  calcChange();
+function setQ(v) {
+  npadStr = String(v);
+  document.getElementById('npad-val').textContent = npadStr;
+  refreshChange();
 }
 
-function calcChange() {
-  const paid = parseFloat(document.getElementById('amount-paid').value) || 0;
-  const change = paid - currentTotal;
-  const box = document.getElementById('change-box');
-  const label = document.getElementById('change-amount');
-  if (change < 0) {
-    box.style.background = '#fde8e8';
-    label.style.color = '#e74c3c';
-    label.textContent = `-$${Math.abs(change).toFixed(2)}`;
-  } else {
-    box.style.background = '#e8f8ef';
-    label.style.color = '#27ae60';
-    label.textContent = `$${change.toFixed(2)}`;
-  }
+function refreshChange() {
+  if (method !== 'cash') return;
+  const paid   = parseFloat(npadStr) || 0;
+  const change = paid - orderTotal;
+  const row    = document.getElementById('change-row');
+  const valEl  = document.getElementById('change-val');
+  row.className = 'change-row';
+  if (change < -0.001)       { row.classList.add('short'); valEl.textContent = `-${fmt(Math.abs(change))}`; valEl.style.color = '#e74c3c'; }
+  else if (change < 0.001)   { row.classList.add('exact'); valEl.textContent = '$0.00'; valEl.style.color = '#27ae60'; }
+  else                       { valEl.textContent = fmt(change); valEl.style.color = '#27ae60'; }
 }
 
+// ── Confirm sale ───────────────────────────────────────────────────────────
 async function confirmSale() {
-  const amountPaid = selectedMethod === 'cash'
-    ? (parseFloat(document.getElementById('amount-paid').value) || 0)
-    : currentTotal;
-
-  if (selectedMethod === 'cash' && amountPaid < currentTotal) {
-    showToast('El monto recibido es menor al total', 'danger');
+  const paid = method === 'cash' ? (parseFloat(npadStr) || 0) : orderTotal;
+  if (method === 'cash' && paid < orderTotal - 0.001) {
+    const w = document.getElementById('npad-wrap');
+    w.classList.remove('err'); void w.offsetWidth; w.classList.add('err');
+    setTimeout(() => w.classList.remove('err'), 400);
+    toast('Monto insuficiente', 'danger');
     return;
   }
-
-  const btn = document.getElementById('btn-confirm-sale');
+  const btn = document.getElementById('btn-confirm');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando…';
+
+  const snap        = cart.map(i => ({ ...i }));
+  const snapMethod  = method;
 
   try {
-    const res = await fetch('/pos/sale', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        items: cart.map(i => ({id: i.id, name: i.name, price: i.price, quantity: i.qty})),
-        payment_method: selectedMethod,
-        amount_paid: amountPaid,
-      })
+    const res  = await fetch('/pos/sale', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        items:          snap.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.qty })),
+        payment_method: method,
+        amount_paid:    paid,
+      }),
     });
     const data = await res.json();
     if (data.success) {
-      bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
-      showReceipt(data);
+      bootstrap.Modal.getInstance(document.getElementById('payModal')).hide();
+      cart.forEach(i => { const b = document.getElementById(`qb-${i.id}`); if (b) b.classList.remove('vis'); });
       cart = [];
       renderCart();
+      showReceipt(data, snap, paid, snapMethod);
     } else {
-      showToast(data.error || 'Error al procesar venta', 'danger');
+      toast(data.error || 'Error al procesar la venta', 'danger');
     }
-  } catch(e) {
-    showToast('Error de conexión', 'danger');
-  } finally {
+  } catch (e) { toast('Error de conexión', 'danger'); }
+  finally {
     btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirmar Venta';
+    btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Confirmar Venta';
   }
 }
 
-// --------------- Receipt ---------------
-function showReceipt(data) {
-  const itemsHtml = cart.length > 0 ? '' : '';
-  const now = new Date().toLocaleString('es-MX');
-  const method = selectedMethod === 'cash' ? 'Efectivo' : 'Tarjeta';
-  document.getElementById('receipt-body').innerHTML = `
-    <div class="text-center border rounded p-3" style="font-family:monospace;font-size:.85rem;">
-      <div class="fw-bold fs-6 mb-1">{{ config.business_name }}</div>
-      ${{{ config.address|tojson }} ? `<div class="text-muted">${{{ config.address|tojson }}}</div>` : ''}
-      <hr class="my-2">
-      <div class="text-muted mb-2">${now}</div>
-      <div class="text-muted mb-2">Venta #${data.sale_id} · ${method}</div>
-      <hr class="my-2">
-      <div class="d-flex justify-content-between fw-bold mt-2">
-        <span>TOTAL</span><span>$${data.total.toFixed(2)}</span>
+// ── Receipt ────────────────────────────────────────────────────────────────
+function showReceipt(data, snap, paid, mth) {
+  document.getElementById('rcpt-num').textContent = '#' + data.sale_id;
+  const now    = new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+  const mLabel = mth === 'cash' ? 'Efectivo' : 'Tarjeta';
+
+  document.getElementById('rcpt-body').innerHTML = `
+    <div class="rcpt-wrap">
+      <div class="rh">
+        <strong>${esc(BIZ.name)}</strong>
+        ${BIZ.address ? `<br><span style="color:#888;font-size:.75rem;">${esc(BIZ.address)}</span>` : ''}
+        ${BIZ.phone   ? `<br><span style="color:#888;font-size:.75rem;">Tel: ${esc(BIZ.phone)}</span>` : ''}
       </div>
-      ${selectedMethod === 'cash' ? `
-      <div class="d-flex justify-content-between text-muted small">
-        <span>Recibido</span><span>$${parseFloat(document.getElementById('amount-paid').value || 0).toFixed(2)}</span>
+      <hr>
+      <div style="display:flex;justify-content:space-between;color:#888;font-size:.72rem;">
+        <span>${now}</span><span>Venta #${data.sale_id}</span>
       </div>
-      <div class="d-flex justify-content-between fw-bold text-success">
-        <span>Cambio</span><span>$${data.change.toFixed(2)}</span>
-      </div>` : ''}
-      <hr class="my-2">
-      <div class="text-muted" style="font-size:.75rem;">¡Gracias por su compra!</div>
-    </div>
-  `;
-  new bootstrap.Modal(document.getElementById('receiptModal')).show();
+      <hr>
+      <table>
+        <thead><tr><th class="rn">Producto</th><th class="rq">Cant</th><th class="rs">Total</th></tr></thead>
+        <tbody>
+          ${snap.map(i => `<tr>
+            <td class="rn">${esc(i.name)}</td>
+            <td class="rq">${i.qty}</td>
+            <td class="rs">${fmt(i.price * i.qty)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <hr>
+      <div class="rt-row rt-total"><span>TOTAL</span><span>${fmt(data.total)}</span></div>
+      <div class="rt-row rt-muted"><span>${mLabel}</span><span>${fmt(paid)}</span></div>
+      ${mth === 'cash' ? `<div class="rt-row rt-chg"><span>Cambio</span><span>${fmt(data.change)}</span></div>` : ''}
+      <hr>
+      <div style="text-align:center;color:#aaa;font-size:.72rem;">¡Gracias por su compra!</div>
+    </div>`;
+
+  new bootstrap.Modal(document.getElementById('rcptModal')).show();
 }
 
-function printReceipt() {
-  const content = document.getElementById('receipt-body').innerHTML;
-  const win = window.open('', '_blank', 'width=380,height=500');
-  win.document.write(`<html><head><title>Ticket</title>
-    <style>body{font-family:monospace;padding:20px;}@media print{body{padding:0;}}</style>
-    </head><body>${content}<script>window.onload=()=>window.print();<\/script></body></html>`);
+function printTicket() {
+  const body = document.getElementById('rcpt-body').innerHTML;
+  const win  = window.open('', '_blank', 'width=420,height=640');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8"><title>Ticket</title>
+    <style>
+      *{box-sizing:border-box;} body{font-family:'Courier New',monospace;font-size:12px;padding:16px;margin:0;}
+      @page{margin:5mm;} table{width:100%;border-collapse:collapse;}
+      .rn{width:55%;} .rq{width:15%;text-align:center;} .rs{width:30%;text-align:right;}
+      hr{border:none;border-top:1px dashed #888;margin:8px 0;}
+    </style>
+  </head><body>
+    ${body}
+    <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),1500);}<\/script>
+  </body></html>`);
   win.document.close();
 }
 
-function closeReceipt() {
-  bootstrap.Modal.getInstance(document.getElementById('receiptModal')).hide();
+function closeRcpt() { bootstrap.Modal.getInstance(document.getElementById('rcptModal')).hide(); }
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const inField  = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
+  const payOpen  = document.getElementById('payModal').classList.contains('show');
+  const rcptOpen = document.getElementById('rcptModal').classList.contains('show');
+
+  if (e.key === 'F2' && !payOpen && !rcptOpen) {
+    e.preventDefault(); if (cart.length) openPayment(); return;
+  }
+  if (payOpen && method === 'cash') {
+    if ('0123456789'.includes(e.key))   { e.preventDefault(); nk(e.key); return; }
+    if (e.key === '.' || e.key === ',') { e.preventDefault(); nk('.'); return; }
+    if (e.key === 'Backspace')          { e.preventDefault(); nk('⌫'); return; }
+    if (e.key === 'Delete')             { e.preventDefault(); nk('C'); return; }
+    if (e.key === 'Enter')              { e.preventDefault(); confirmSale(); return; }
+  }
+  if (payOpen && method === 'card' && e.key === 'Enter') { e.preventDefault(); confirmSale(); return; }
+
+  // Type to search
+  if (!payOpen && !rcptOpen && !inField && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    document.getElementById('srch').focus();
+  }
+});
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type = 'info') {
+  let el = document.getElementById('pos-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pos-toast';
+    el.style.cssText = 'position:fixed;bottom:22px;right:22px;z-index:9999;min-width:240px;'
+      + 'border-radius:12px;padding:12px 18px;font-size:.875rem;font-weight:600;'
+      + 'box-shadow:0 4px 20px rgba(0,0,0,.15);transition:opacity .3s;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  const map = { success:'#e8f8ef|#27ae60', danger:'#fde8e8|#e74c3c', warning:'#fff8e1|#e67e22', info:'#eef6fd|#3498db' };
+  const [bg, color] = (map[type] || map.info).split('|');
+  Object.assign(el.style, { background: bg, color, opacity: '1' });
+  el.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 2800);
 }
 
-// --------------- Toast ---------------
-function showToast(msg, type = 'info') {
-  const t = document.createElement('div');
-  t.className = `alert alert-${type} position-fixed fw-semibold shadow`;
-  t.style.cssText = 'bottom:20px;right:20px;z-index:9999;min-width:260px;';
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3000);
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmt(v) { return '$' + (parseFloat(v) || 0).toFixed(2); }
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Init
+// ── Init ───────────────────────────────────────────────────────────────────
 renderCart();
+applyFilters();
 </script>
 {% endblock %}
