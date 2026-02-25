@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}POS{% endblock %} · {{ config.business_name }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- ====== SIDEBAR ====== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      {% if config.logo %}
+        <img src="{{ url_for('static', filename=config.logo) }}" alt="Logo">
+      {% else %}
+        <div style="width:44px;height:44px;border-radius:8px;background:#3498db;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="bi bi-shop text-white fs-5"></i>
+        </div>
+      {% endif %}
+      <div class="brand-text">
+        <div class="brand-name">{{ config.business_name }}</div>
+        <div class="brand-sub">Punto de Venta</div>
+      </div>
+    </div>
+
+    <nav>
+      <a href="{{ url_for('dashboard') }}"
+         class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+        <i class="bi bi-speedometer2"></i><span>Dashboard</span>
+      </a>
+
+      {% if session.get('shift_id') %}
+      <a href="{{ url_for('pos') }}"
+         class="nav-link {% if request.endpoint == 'pos' %}active{% endif %}">
+        <i class="bi bi-cart3"></i><span>Vender</span>
+      </a>
+      {% endif %}
+
+      <a href="{{ url_for('inventory') }}"
+         class="nav-link {% if request.endpoint == 'inventory' %}active{% endif %}">
+        <i class="bi bi-boxes"></i><span>Inventario</span>
+      </a>
+
+      <a href="{{ url_for('reports') }}"
+         class="nav-link {% if request.endpoint == 'reports' %}active{% endif %}">
+        <i class="bi bi-bar-chart-line"></i><span>Reportes</span>
+      </a>
+
+      {% if session.get('role') == 'admin' %}
+      <div class="nav-divider"></div>
+      <a href="{{ url_for('config') }}"
+         class="nav-link {% if request.endpoint == 'config' %}active{% endif %}">
+        <i class="bi bi-gear"></i><span>Configuración</span>
+      </a>
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="shift-badge">
+        {% if session.get('shift_id') %}
+          <span class="badge bg-success">● Turno abierto</span>
+          <a href="{{ url_for('shift_close') }}" class="ms-auto text-warning text-decoration-none" style="font-size:.78rem;">
+            <i class="bi bi-stop-circle"></i> <span>Cerrar</span>
+          </a>
+        {% else %}
+          <span class="badge bg-danger">● Sin turno</span>
+          <a href="{{ url_for('shift_open') }}" class="ms-auto text-success text-decoration-none" style="font-size:.78rem;">
+            <i class="bi bi-play-circle"></i> <span>Abrir</span>
+          </a>
+        {% endif %}
+      </div>
+      <div class="user-row">
+        <i class="bi bi-person-circle"></i>
+        <span>{{ session.get('username') }}</span>
+        <a href="{{ url_for('logout') }}" title="Salir"><i class="bi bi-box-arrow-right"></i></a>
+      </div>
+    </div>
+  </aside>
+  <!-- ====== END SIDEBAR ====== -->
+
+  <!-- ====== MAIN CONTENT ====== -->
+  <main id="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-wrapper">
+      {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 mb-1" role="alert">
+        {{ msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+  <!-- ====== END MAIN ====== -->
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

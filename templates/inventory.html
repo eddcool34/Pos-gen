@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Inventario{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2><i class="bi bi-boxes me-2"></i>Inventario</h2>
+  <button class="btn btn-success fw-semibold" data-bs-toggle="modal" data-bs-target="#addModal">
+    <i class="bi bi-plus-lg me-1"></i>Nuevo Producto
+  </button>
+</div>
+
+<!-- Filters -->
+<div class="card-box mb-3">
+  <form method="GET" class="d-flex gap-2 flex-wrap p-3">
+    <input type="text" name="q" class="form-control" placeholder="Buscar por nombre…"
+           value="{{ q }}" style="max-width:240px;">
+    <select name="cat" class="form-select" style="max-width:180px;">
+      <option value="">Todas las categorías</option>
+      {% for c in categories %}
+      <option value="{{ c['category'] }}" {% if cat == c['category'] %}selected{% endif %}>
+        {{ c['category'] }}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline-secondary">
+      <i class="bi bi-search"></i> Buscar
+    </button>
+    <a href="{{ url_for('inventory') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-x-circle"></i> Limpiar
+    </a>
+  </form>
+</div>
+
+<!-- Table -->
+<div class="card-box">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Producto</th>
+          <th>Categoría</th>
+          <th>Código</th>
+          <th class="text-end">Precio</th>
+          <th class="text-center">Stock</th>
+          <th class="text-center">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        <tr>
+          <td class="text-muted">{{ p['id'] }}</td>
+          <td class="fw-semibold">{{ p['name'] }}</td>
+          <td><span class="badge bg-secondary-subtle text-secondary">{{ p['category'] }}</span></td>
+          <td class="text-muted small">{{ p['barcode'] or '—' }}</td>
+          <td class="text-end fw-semibold">${{ "%.2f"|format(p['price']) }}</td>
+          <td class="text-center">
+            {% if p['stock'] == 0 %}
+              <span class="badge-stock out">Agotado</span>
+            {% elif p['stock'] <= 3 %}
+              <span class="badge-stock low">{{ p['stock'] }}</span>
+            {% elif p['stock'] <= 10 %}
+              <span class="badge-stock low">{{ p['stock'] }}</span>
+            {% else %}
+              <span class="badge-stock ok">{{ p['stock'] }}</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-primary me-1"
+                    data-bs-toggle="modal"
+                    data-bs-target="#editModal{{ p['id'] }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form action="{{ url_for('inventory_delete', pid=p['id']) }}" method="POST"
+                  class="d-inline"
+                  onsubmit="return confirm('¿Eliminar {{ p['name'] }}?')">
+              <button class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-5">
+            <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
+            No hay productos. <a href="#" data-bs-toggle="modal" data-bs-target="#addModal">Agrega el primero</a>.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="p-3 text-muted small border-top">
+    {{ products|length }} producto(s) encontrado(s)
+  </div>
+</div>
+
+
+<!-- ===== ADD MODAL ===== -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Nuevo Producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ url_for('inventory_add') }}" method="POST">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Nombre *</label>
+              <input type="text" name="name" class="form-control" required placeholder="Nombre del producto">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Precio *</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="price" class="form-control" required
+                       step="0.01" min="0.01" placeholder="0.00">
+              </div>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Stock inicial</label>
+              <input type="number" name="stock" class="form-control"
+                     min="0" value="0" placeholder="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Categoría</label>
+              <input type="text" name="category" class="form-control"
+                     placeholder="General" list="cat-list-add">
+              <datalist id="cat-list-add">
+                {% for c in categories %}
+                <option value="{{ c['category'] }}">
+                {% endfor %}
+              </datalist>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Código de barras</label>
+              <input type="text" name="barcode" class="form-control" placeholder="Opcional">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success fw-semibold">
+            <i class="bi bi-check-lg me-1"></i>Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== EDIT MODALS ===== -->
+{% for p in products %}
+<div class="modal fade" id="editModal{{ p['id'] }}" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="bi bi-pencil me-2"></i>Editar Producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ url_for('inventory_edit', pid=p['id']) }}" method="POST">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Nombre *</label>
+              <input type="text" name="name" class="form-control"
+                     required value="{{ p['name'] }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Precio *</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="price" class="form-control"
+                       required step="0.01" min="0.01" value="{{ p['price'] }}">
+              </div>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Stock</label>
+              <input type="number" name="stock" class="form-control"
+                     min="0" value="{{ p['stock'] }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Categoría</label>
+              <input type="text" name="category" class="form-control"
+                     value="{{ p['category'] }}" list="cat-list-edit{{ p['id'] }}">
+              <datalist id="cat-list-edit{{ p['id'] }}">
+                {% for c in categories %}
+                <option value="{{ c['category'] }}">
+                {% endfor %}
+              </datalist>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold small">Código de barras</label>
+              <input type="text" name="barcode" class="form-control"
+                     value="{{ p['barcode'] }}">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary fw-semibold">
+            <i class="bi bi-check-lg me-1"></i>Actualizar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% block title %}Vender{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2><i class="bi bi-cart3 me-2"></i>Punto de Venta</h2>
+  <span class="text-muted small">Cajero: <strong>{{ session.get('username') }}</strong></span>
+</div>
+
+<div class="pos-layout">
+
+  <!-- ===== PRODUCTS PANEL ===== -->
+  <div class="pos-products">
+    <div class="products-toolbar">
+      <!-- Search -->
+      <input type="text" id="search-input" class="form-control form-control-sm"
+             placeholder="Buscar producto..." style="max-width:220px;"
+             oninput="filterProducts()">
+
+      <!-- Category pills -->
+      <button class="cat-pill active" data-cat="all" onclick="filterByCategory(this)">Todos</button>
+      {% for c in categories %}
+      <button class="cat-pill" data-cat="{{ c['category'] }}" onclick="filterByCategory(this)">
+        {{ c['category'] }}
+      </button>
+      {% endfor %}
+    </div>
+
+    <div class="products-grid" id="products-grid">
+      {% for p in products %}
+      <div class="product-tile"
+           data-id="{{ p['id'] }}"
+           data-name="{{ p['name'] }}"
+           data-price="{{ p['price'] }}"
+           data-stock="{{ p['stock'] }}"
+           data-cat="{{ p['category'] }}"
+           onclick="addToCart(this)">
+        <div class="pt-name">{{ p['name'] }}</div>
+        <div class="pt-price">${{ "%.2f"|format(p['price']) }}</div>
+        <div class="pt-stock">
+          {% if p['stock'] <= 3 %}
+            <span class="text-danger">{{ p['stock'] }} disponibles</span>
+          {% else %}
+            {{ p['stock'] }} disponibles
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="text-muted text-center py-5 col-span-all" style="grid-column:1/-1;">
+        <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
+        No hay productos con stock disponible.<br>
+        <a href="{{ url_for('inventory') }}">Ir a Inventario</a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ===== CART PANEL ===== -->
+  <div class="pos-cart">
+    <div class="cart-header">
+      <span><i class="bi bi-cart3 me-2"></i>Carrito</span>
+      <button class="btn btn-sm btn-outline-secondary" onclick="clearCart()" id="btn-clear">
+        <i class="bi bi-trash3"></i>
+      </button>
+    </div>
+
+    <div id="cart-empty" class="cart-empty">
+      <i class="bi bi-cart-x"></i>
+      <span>Toca un producto para agregar</span>
+    </div>
+
+    <div class="cart-items-list" id="cart-list" style="display:none;"></div>
+
+    <div class="cart-footer">
+      <div class="cart-total-row">
+        <span class="cart-total-label">TOTAL</span>
+        <span class="cart-total-value" id="cart-total">$0.00</span>
+      </div>
+      <button class="btn-checkout" id="btn-checkout" disabled onclick="openPayment()">
+        <i class="bi bi-cash-stack me-2"></i>Cobrar
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== PAYMENT MODAL ===== -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold">Cobro</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <div class="text-center mb-3">
+          <span class="text-muted small">Total a cobrar</span>
+          <div class="fs-1 fw-bold text-success" id="modal-total">$0.00</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Método de pago</label>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark flex-fill pay-method-btn active" data-method="cash"
+                    onclick="selectMethod(this)">
+              <i class="bi bi-cash me-1"></i>Efectivo
+            </button>
+            <button class="btn btn-outline-dark flex-fill pay-method-btn" data-method="card"
+                    onclick="selectMethod(this)">
+              <i class="bi bi-credit-card me-1"></i>Tarjeta
+            </button>
+          </div>
+        </div>
+
+        <div id="cash-section">
+          <div class="mb-2">
+            <label class="form-label fw-semibold small">Monto recibido</label>
+            <div class="input-group input-group-lg">
+              <span class="input-group-text fw-bold">$</span>
+              <input type="number" id="amount-paid" class="form-control"
+                     placeholder="0.00" step="0.01" min="0"
+                     oninput="calcChange()">
+            </div>
+          </div>
+          <!-- Quick amounts -->
+          <div class="d-flex gap-1 flex-wrap mb-3" id="quick-amounts"></div>
+          <div class="p-3 rounded" id="change-box" style="background:#f0f2f5;">
+            <div class="d-flex justify-content-between">
+              <span class="small text-muted">Cambio</span>
+              <strong id="change-amount" class="text-success fs-5">$0.00</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-success btn-lg px-4 fw-bold" id="btn-confirm-sale" onclick="confirmSale()">
+          <i class="bi bi-check-lg me-1"></i>Confirmar Venta
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RECEIPT MODAL ===== -->
+<div class="modal fade" id="receiptModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold text-success">
+          <i class="bi bi-check-circle-fill me-2"></i>¡Venta Completada!
+        </h5>
+      </div>
+      <div class="modal-body" id="receipt-body"></div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-outline-secondary" onclick="printReceipt()">
+          <i class="bi bi-printer me-1"></i>Imprimir
+        </button>
+        <button class="btn btn-success" onclick="closeReceipt()">
+          Nueva Venta
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --------------- Cart State ---------------
+let cart = [];
+let currentTotal = 0;
+let selectedMethod = 'cash';
+
+// --------------- Product Filter ---------------
+let activeCat = 'all';
+
+function filterProducts() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  document.querySelectorAll('.product-tile').forEach(tile => {
+    const name = tile.dataset.name.toLowerCase();
+    const cat = tile.dataset.cat;
+    const matchQ = name.includes(q);
+    const matchC = activeCat === 'all' || cat === activeCat;
+    tile.style.display = matchQ && matchC ? '' : 'none';
+  });
+}
+
+function filterByCategory(btn) {
+  document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeCat = btn.dataset.cat;
+  filterProducts();
+}
+
+// --------------- Cart Operations ---------------
+function addToCart(tile) {
+  const id = parseInt(tile.dataset.id);
+  const name = tile.dataset.name;
+  const price = parseFloat(tile.dataset.price);
+  const stock = parseInt(tile.dataset.stock);
+
+  const existing = cart.find(i => i.id === id);
+  if (existing) {
+    if (existing.qty >= stock) {
+      showToast(`Stock máximo alcanzado (${stock})`, 'warning');
+      return;
+    }
+    existing.qty++;
+  } else {
+    cart.push({ id, name, price, qty: 1, stock });
+  }
+
+  // Flash tile
+  tile.style.borderColor = '#27ae60';
+  setTimeout(() => tile.style.borderColor = '', 300);
+
+  renderCart();
+}
+
+function changeQty(id, delta) {
+  const item = cart.find(i => i.id === id);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) {
+    cart = cart.filter(i => i.id !== id);
+  } else if (item.qty > item.stock) {
+    item.qty = item.stock;
+    showToast('Stock máximo alcanzado', 'warning');
+  }
+  renderCart();
+}
+
+function removeItem(id) {
+  cart = cart.filter(i => i.id !== id);
+  renderCart();
+}
+
+function clearCart() {
+  cart = [];
+  renderCart();
+}
+
+function renderCart() {
+  const list = document.getElementById('cart-list');
+  const empty = document.getElementById('cart-empty');
+  const btnCheckout = document.getElementById('btn-checkout');
+
+  if (cart.length === 0) {
+    list.style.display = 'none';
+    empty.style.display = '';
+    btnCheckout.disabled = true;
+    document.getElementById('cart-total').textContent = '$0.00';
+    currentTotal = 0;
+    return;
+  }
+
+  list.style.display = '';
+  empty.style.display = 'none';
+  btnCheckout.disabled = false;
+
+  currentTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  document.getElementById('cart-total').textContent = '$' + currentTotal.toFixed(2);
+
+  list.innerHTML = cart.map(item => `
+    <div class="cart-item">
+      <div>
+        <div class="ci-name">${item.name}</div>
+        <div class="ci-unit">$${item.price.toFixed(2)} c/u</div>
+      </div>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeQty(${item.id}, -1)">−</button>
+        <span class="qty-num">${item.qty}</span>
+        <button class="qty-btn" onclick="changeQty(${item.id}, 1)">+</button>
+      </div>
+      <span class="ci-subtotal">$${(item.price * item.qty).toFixed(2)}</span>
+      <button class="ci-remove" onclick="removeItem(${item.id})">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+// --------------- Payment ---------------
+function openPayment() {
+  if (cart.length === 0) return;
+  selectedMethod = 'cash';
+  document.getElementById('modal-total').textContent = '$' + currentTotal.toFixed(2);
+  document.getElementById('amount-paid').value = '';
+  document.getElementById('change-amount').textContent = '$0.00';
+  document.getElementById('cash-section').style.display = '';
+  buildQuickAmounts();
+  const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
+  modal.show();
+}
+
+function selectMethod(btn) {
+  document.querySelectorAll('.pay-method-btn').forEach(b => {
+    b.classList.remove('active', 'btn-dark');
+    b.classList.add('btn-outline-dark');
+  });
+  btn.classList.remove('btn-outline-dark');
+  btn.classList.add('active', 'btn-dark');
+  selectedMethod = btn.dataset.method;
+  document.getElementById('cash-section').style.display =
+    selectedMethod === 'cash' ? '' : 'none';
+}
+
+function buildQuickAmounts() {
+  const total = currentTotal;
+  const amounts = [
+    Math.ceil(total / 10) * 10,
+    Math.ceil(total / 50) * 50,
+    Math.ceil(total / 100) * 100,
+    Math.ceil(total / 500) * 500,
+  ].filter((v, i, a) => v >= total && a.indexOf(v) === i).slice(0, 4);
+
+  const container = document.getElementById('quick-amounts');
+  container.innerHTML = amounts.map(a =>
+    `<button class="btn btn-sm btn-outline-secondary" onclick="setAmount(${a})">$${a}</button>`
+  ).join('');
+}
+
+function setAmount(v) {
+  document.getElementById('amount-paid').value = v;
+  calcChange();
+}
+
+function calcChange() {
+  const paid = parseFloat(document.getElementById('amount-paid').value) || 0;
+  const change = paid - currentTotal;
+  const box = document.getElementById('change-box');
+  const label = document.getElementById('change-amount');
+  if (change < 0) {
+    box.style.background = '#fde8e8';
+    label.style.color = '#e74c3c';
+    label.textContent = `-$${Math.abs(change).toFixed(2)}`;
+  } else {
+    box.style.background = '#e8f8ef';
+    label.style.color = '#27ae60';
+    label.textContent = `$${change.toFixed(2)}`;
+  }
+}
+
+async function confirmSale() {
+  const amountPaid = selectedMethod === 'cash'
+    ? (parseFloat(document.getElementById('amount-paid').value) || 0)
+    : currentTotal;
+
+  if (selectedMethod === 'cash' && amountPaid < currentTotal) {
+    showToast('El monto recibido es menor al total', 'danger');
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirm-sale');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
+
+  try {
+    const res = await fetch('/pos/sale', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        items: cart.map(i => ({id: i.id, name: i.name, price: i.price, quantity: i.qty})),
+        payment_method: selectedMethod,
+        amount_paid: amountPaid,
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+      showReceipt(data);
+      cart = [];
+      renderCart();
+    } else {
+      showToast(data.error || 'Error al procesar venta', 'danger');
+    }
+  } catch(e) {
+    showToast('Error de conexión', 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirmar Venta';
+  }
+}
+
+// --------------- Receipt ---------------
+function showReceipt(data) {
+  const itemsHtml = cart.length > 0 ? '' : '';
+  const now = new Date().toLocaleString('es-MX');
+  const method = selectedMethod === 'cash' ? 'Efectivo' : 'Tarjeta';
+  document.getElementById('receipt-body').innerHTML = `
+    <div class="text-center border rounded p-3" style="font-family:monospace;font-size:.85rem;">
+      <div class="fw-bold fs-6 mb-1">{{ config.business_name }}</div>
+      ${{{ config.address|tojson }} ? `<div class="text-muted">${{{ config.address|tojson }}}</div>` : ''}
+      <hr class="my-2">
+      <div class="text-muted mb-2">${now}</div>
+      <div class="text-muted mb-2">Venta #${data.sale_id} · ${method}</div>
+      <hr class="my-2">
+      <div class="d-flex justify-content-between fw-bold mt-2">
+        <span>TOTAL</span><span>$${data.total.toFixed(2)}</span>
+      </div>
+      ${selectedMethod === 'cash' ? `
+      <div class="d-flex justify-content-between text-muted small">
+        <span>Recibido</span><span>$${parseFloat(document.getElementById('amount-paid').value || 0).toFixed(2)}</span>
+      </div>
+      <div class="d-flex justify-content-between fw-bold text-success">
+        <span>Cambio</span><span>$${data.change.toFixed(2)}</span>
+      </div>` : ''}
+      <hr class="my-2">
+      <div class="text-muted" style="font-size:.75rem;">¡Gracias por su compra!</div>
+    </div>
+  `;
+  new bootstrap.Modal(document.getElementById('receiptModal')).show();
+}
+
+function printReceipt() {
+  const content = document.getElementById('receipt-body').innerHTML;
+  const win = window.open('', '_blank', 'width=380,height=500');
+  win.document.write(`<html><head><title>Ticket</title>
+    <style>body{font-family:monospace;padding:20px;}@media print{body{padding:0;}}</style>
+    </head><body>${content}<script>window.onload=()=>window.print();<\/script></body></html>`);
+  win.document.close();
+}
+
+function closeReceipt() {
+  bootstrap.Modal.getInstance(document.getElementById('receiptModal')).hide();
+}
+
+// --------------- Toast ---------------
+function showToast(msg, type = 'info') {
+  const t = document.createElement('div');
+  t.className = `alert alert-${type} position-fixed fw-semibold shadow`;
+  t.style.cssText = 'bottom:20px;right:20px;z-index:9999;min-width:260px;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// Init
+renderCart();
+</script>
+{% endblock %}

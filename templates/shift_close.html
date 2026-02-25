@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Cerrar Turno{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-center" style="min-height:70vh;">
+  <div style="width:100%;max-width:480px;">
+    <div class="card-box">
+      <div class="card-box-header">
+        <h5 class="text-danger"><i class="bi bi-stop-circle-fill me-2"></i>Cerrar Turno</h5>
+      </div>
+      <div class="p-4">
+
+        <!-- Summary -->
+        <div class="row g-2 mb-4">
+          <div class="col-6">
+            <div class="p-3 bg-light rounded text-center">
+              <div class="fw-bold text-muted small mb-1">Apertura</div>
+              <div class="fs-5 fw-bold">${{ "%.2f"|format(shift['opening_cash']) }}</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 bg-light rounded text-center">
+              <div class="fw-bold text-muted small mb-1">Ventas realizadas</div>
+              <div class="fs-5 fw-bold">{{ summary['cnt'] }}</div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="p-3 rounded text-center" style="background:#e8f8ef;">
+              <div class="fw-bold text-muted small mb-1">Total vendido en el turno</div>
+              <div class="fs-3 fw-bold text-success">${{ "%.2f"|format(summary['total']) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+
+        <form method="POST">
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Efectivo en caja al cerrar</label>
+            <div class="input-group input-group-lg">
+              <span class="input-group-text fw-bold">$</span>
+              <input type="number" id="closing_cash" name="closing_cash"
+                     class="form-control" placeholder="0.00"
+                     step="0.01" min="0" value="0" autofocus
+                     oninput="calcDiff()">
+            </div>
+          </div>
+
+          <div id="diff-box" class="mb-4 p-3 rounded bg-light small text-muted d-none">
+            <span id="diff-label">—</span>
+          </div>
+
+          <div class="mb-4 p-3 bg-light rounded small text-muted">
+            <i class="bi bi-info-circle me-1"></i>
+            Cajero: <strong>{{ shift['username'] if shift else '—' }}</strong><br>
+            Apertura: <strong>{{ shift['open_time'][:16] if shift else '—' }}</strong>
+          </div>
+
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary flex-fill">
+              Cancelar
+            </a>
+            <button type="submit" class="btn btn-danger flex-fill fw-semibold">
+              <i class="bi bi-stop-fill me-1"></i>Cerrar Turno
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const salesTotal = {{ summary['total'] }};
+const openingCash = {{ shift['opening_cash'] if shift else 0 }};
+
+function calcDiff() {
+  const closing = parseFloat(document.getElementById('closing_cash').value) || 0;
+  const expected = openingCash + salesTotal;
+  const diff = closing - expected;
+  const box = document.getElementById('diff-box');
+  const label = document.getElementById('diff-label');
+  box.classList.remove('d-none');
+  if (Math.abs(diff) < 0.01) {
+    box.className = 'mb-4 p-3 rounded small';
+    box.style.background = '#e8f8ef';
+    label.innerHTML = '<i class="bi bi-check-circle text-success me-1"></i>Caja cuadra perfectamente.';
+  } else if (diff < 0) {
+    box.className = 'mb-4 p-3 rounded small';
+    box.style.background = '#fde8e8';
+    label.innerHTML = `<i class="bi bi-exclamation-triangle text-danger me-1"></i>Diferencia: <strong>-$${Math.abs(diff).toFixed(2)}</strong> (faltante)`;
+  } else {
+    box.className = 'mb-4 p-3 rounded small';
+    box.style.background = '#fff3cd';
+    label.innerHTML = `<i class="bi bi-info-circle text-warning me-1"></i>Diferencia: <strong>+$${diff.toFixed(2)}</strong> (sobrante)`;
+  }
+}
+</script>
+{% endblock %}
